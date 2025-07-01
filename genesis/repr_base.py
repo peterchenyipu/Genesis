@@ -43,6 +43,8 @@ class RBC:
     def __repr__(self):
         if not self._is_debugger():
             return self.__colorized__repr__()
+        else:
+            return self._repr_brief()
 
     def __colorized__repr__(self) -> str:
         all_attrs = self.__dir__()
