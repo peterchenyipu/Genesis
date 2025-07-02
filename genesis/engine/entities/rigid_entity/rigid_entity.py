@@ -1932,6 +1932,11 @@ class RigidEntity(Entity):
                 for obj_geom_idx in range(object_in_hand.geom_start, object_in_hand.geom_end):
                     allowed_collision_pairs.add((link_idx, obj_geom_idx))
                     allowed_collision_pairs.add((obj_geom_idx, link_idx))
+                    
+        # Record allowed object collision pairs at the current state (before planning)
+        object_collision_pairs_at_start = set(map(tuple, object_in_hand.detect_collision()))
+        relaxed_allowed_pairs = mask_collision_pairs | allowed_collision_pairs | object_collision_pairs_at_start
+        strict_allowed_pairs = mask_collision_pairs | allowed_collision_pairs
 
         def is_ompl_state_valid(state):
             if ignore_collision:
@@ -1948,9 +1953,19 @@ class RigidEntity(Entity):
             object_in_hand.set_pos(new_w_T_object[:3, 3])
             object_in_hand.set_quat(R.from_matrix(new_w_T_object[:3, :3]).as_quat(scalar_first=True))
             
+            
+            # collision checking
             collision_pairs = set(map(tuple, self.detect_collision()))
             object_collision_pairs = set(map(tuple, object_in_hand.detect_collision()))
-            return not ((collision_pairs | object_collision_pairs) - mask_collision_pairs - allowed_collision_pairs)
+
+            # additionally allow extra existing collision if qpos is close to the start
+            qpos_array = tensor_to_array(qpos)
+            if np.linalg.norm(qpos_array - qpos_start) < 0.1:
+                final_allow_collision_pairs = relaxed_allowed_pairs
+            else:
+                final_allow_collision_pairs = strict_allowed_pairs
+                
+            return not ((collision_pairs | object_collision_pairs) - final_allow_collision_pairs)
 
         ss.setStateValidityChecker(ob.StateValidityCheckerFn(is_ompl_state_valid))
 
